@@ -9,7 +9,9 @@
           "--project",
           "C:\\Users\\amado\\code\\mathtabla-hooks\\src\\MathTabla.AgentHooks",
           "--",
-          "pre-tool-policy"
+          "pre-tool-policy",
+          "--host",
+          "codex"
         ]
       }
     ]

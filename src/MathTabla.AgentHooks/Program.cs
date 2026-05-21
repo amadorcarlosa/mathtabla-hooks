@@ -15,7 +15,7 @@ internal static class AgentHooksApp
 
         return args[0] switch
         {
-            "pre-tool-policy" => await PreToolPolicyCommand.RunAsync(),
+            HookCommandNames.PreToolPolicy => await PreToolPolicyCommand.RunAsync(args[1..]),
             "--help" or "-h" => WriteHelp(),
             _ => UnknownCommand(args[0])
         };
@@ -26,7 +26,8 @@ internal static class AgentHooksApp
         Console.WriteLine("MathTabla.AgentHooks");
         Console.WriteLine();
         Console.WriteLine("Commands:");
-        Console.WriteLine("  pre-tool-policy    Read a tool-use JSON payload from stdin and block dangerous commands.");
+        Console.WriteLine("  pre-tool-policy [--host generic|claude|copilot|codex]");
+        Console.WriteLine("      Read a tool-use JSON payload from stdin and block dangerous commands.");
         return 0;
     }
 
@@ -39,8 +40,9 @@ internal static class AgentHooksApp
 
 internal static class PreToolPolicyCommand
 {
-    public static async Task<int> RunAsync()
+    public static async Task<int> RunAsync(string[] args)
     {
+        var host = HookHostOptions.Parse(args);
         var payload = await Console.In.ReadToEndAsync();
 
         if (string.IsNullOrWhiteSpace(payload))
@@ -62,17 +64,112 @@ internal static class PreToolPolicyCommand
 
         if (string.IsNullOrWhiteSpace(request.Command))
         {
-            return 0;
+            return HookResponseWriter.Allow(host);
         }
 
         var decision = CommandPolicy.Evaluate(request.Command);
         if (decision.Allowed)
         {
-            return 0;
+            return HookResponseWriter.Allow(host);
         }
 
-        Console.Error.WriteLine(decision.Reason);
-        return 2;
+        return HookResponseWriter.Block(host, decision.Reason ?? "Blocked by pre-tool policy.");
+    }
+}
+
+internal static class HookCommandNames
+{
+    public const string PreToolPolicy = "pre-tool-policy";
+    public const string SessionContext = "session-context";
+    public const string PostToolReview = "post-tool-review";
+    public const string StopCheck = "stop-check";
+}
+
+internal static class HookHosts
+{
+    public const string Generic = "generic";
+    public const string Claude = "claude";
+    public const string Copilot = "copilot";
+    public const string Codex = "codex";
+}
+
+internal static class HookEvents
+{
+    public const string PreToolUse = "PreToolUse";
+    public const string PreToolUseCamelCase = "preToolUse";
+    public const string PostToolUse = "PostToolUse";
+    public const string PostToolUseCamelCase = "postToolUse";
+    public const string Stop = "Stop";
+    public const string AgentStop = "agentStop";
+    public const string SessionStart = "SessionStart";
+    public const string SessionStartCamelCase = "sessionStart";
+}
+
+internal static class HookExitCodes
+{
+    public const int Allow = 0;
+    public const int InvalidInvocation = 1;
+    public const int Block = 2;
+}
+
+internal static class HookHostOptions
+{
+    public static string Parse(string[] args)
+    {
+        for (var i = 0; i < args.Length; i++)
+        {
+            if (!string.Equals(args[i], "--host", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (i + 1 >= args.Length)
+            {
+                return HookHosts.Generic;
+            }
+
+            var host = args[i + 1].Trim().ToLowerInvariant();
+            return host switch
+            {
+                HookHosts.Claude => HookHosts.Claude,
+                HookHosts.Copilot => HookHosts.Copilot,
+                HookHosts.Codex => HookHosts.Codex,
+                _ => HookHosts.Generic
+            };
+        }
+
+        return HookHosts.Generic;
+    }
+}
+
+internal static class HookResponseWriter
+{
+    public static int Allow(string host)
+    {
+        if (host == HookHosts.Copilot)
+        {
+            Console.WriteLine("{}");
+        }
+
+        return HookExitCodes.Allow;
+    }
+
+    public static int Block(string host, string reason)
+    {
+        if (host == HookHosts.Copilot)
+        {
+            var output = new
+            {
+                permissionDecision = "deny",
+                permissionDecisionReason = reason
+            };
+
+            Console.WriteLine(JsonSerializer.Serialize(output));
+            return HookExitCodes.Allow;
+        }
+
+        Console.Error.WriteLine(reason);
+        return HookExitCodes.Block;
     }
 }
 
@@ -91,6 +188,9 @@ internal sealed record AgentHookRequest(
         var command =
             JsonReader.GetNestedString(root, ["tool_input", "command"]) ??
             JsonReader.GetNestedString(root, ["toolInput", "command"]) ??
+            JsonReader.GetNestedString(root, ["toolArgs", "command"]) ??
+            JsonReader.GetCommandFromJsonString(root, "toolArgs") ??
+            JsonReader.GetCommandFromJsonString(root, "tool_args") ??
             JsonReader.GetString(root, "command");
 
         return new AgentHookRequest(hookEventName, toolName, command);
@@ -127,6 +227,25 @@ internal static class JsonReader
         }
 
         return current.ValueKind == JsonValueKind.String ? current.GetString() : null;
+    }
+
+    public static string? GetCommandFromJsonString(JsonElement element, string propertyName)
+    {
+        var json = GetString(element, propertyName);
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            return GetNestedString(document.RootElement, ["command"]);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 }
 

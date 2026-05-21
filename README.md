@@ -12,6 +12,8 @@ VS Code/Copilot, Codex, and Claude Code can expose hook points in different shap
 
 The first hook is intentionally small: it reads a JSON payload from stdin, normalizes common agent field names, detects shell commands, and blocks obviously dangerous operations.
 
+The core policy is agent and model agnostic. Host-specific differences are handled at the edge with `--host`, so the same C# rules can be reused from Claude Code, GitHub Copilot, Codex, or another agent that can call a command hook.
+
 ## Portfolio Purpose
 
 This project demonstrates C#, .NET CLI tooling, JSON processing, agent workflow automation, security guardrails, and developer tooling design.
@@ -49,7 +51,7 @@ This repository includes `global.json` so local `dotnet` commands use the instal
 Current command:
 
 ```powershell
-dotnet run --project src/MathTabla.AgentHooks -- pre-tool-policy
+dotnet run --project src/MathTabla.AgentHooks -- pre-tool-policy --host generic
 ```
 
 Planned extension points include:
@@ -65,12 +67,23 @@ The `pre-tool-policy` command reads JSON from stdin and checks these common fiel
 - `hook_event_name` or `hookEventName`
 - `tool_name` or `toolName`
 - `tool_input.command` or `toolInput.command`
+- `toolArgs.command` when `toolArgs` is an object
+- `toolArgs` or `tool_args` when it is a JSON string containing `command`
 
-It exits with:
+Supported hosts:
+
+- `generic`: portable default, blocks with stderr and exit code `2`
+- `claude`: Claude Code style, blocks with stderr and exit code `2`
+- `copilot`: GitHub Copilot style, blocks with stdout JSON and exit code `0`
+- `codex`: Codex-style adapter, currently treated like the generic/Claude blocking contract
+
+Generic, Claude, and Codex modes exit with:
 
 - `0` when the command is allowed
 - `1` when the hook invocation is invalid
 - `2` when the command is blocked
+
+Copilot mode writes `{"permissionDecision":"deny","permissionDecisionReason":"..."}` to stdout and exits `0`, matching Copilot `preToolUse` decision control.
 
 Blocked examples include:
 
@@ -85,7 +98,7 @@ Safe command:
 
 ```powershell
 '{"hook_event_name":"PreToolUse","tool_name":"shell","tool_input":{"command":"dotnet build"}}' |
-  dotnet run --project src/MathTabla.AgentHooks -- pre-tool-policy
+  dotnet run --project src/MathTabla.AgentHooks -- pre-tool-policy --host claude
 $LASTEXITCODE
 ```
 
@@ -93,23 +106,34 @@ Dangerous command:
 
 ```powershell
 '{"hookEventName":"PreToolUse","toolName":"shell","toolInput":{"command":"rm -rf .git"}}' |
-  dotnet run --project src/MathTabla.AgentHooks -- pre-tool-policy
+  dotnet run --project src/MathTabla.AgentHooks -- pre-tool-policy --host claude
 $LASTEXITCODE
 ```
 
 The dangerous example writes the block reason to stderr and exits `2`.
+
+Copilot-style input:
+
+```powershell
+'{"hookEventName":"preToolUse","toolName":"bash","toolArgs":"{\"command\":\"rm -rf .git\"}"}' |
+  dotnet run --project src/MathTabla.AgentHooks -- pre-tool-policy --host copilot
+$LASTEXITCODE
+```
+
+The Copilot example writes a `permissionDecision` response to stdout and exits `0`.
 
 ## Agent wiring
 
 All examples call the same C# project:
 
 ```powershell
-dotnet run --project C:\Users\amado\code\mathtabla-hooks\src\MathTabla.AgentHooks -- pre-tool-policy
+dotnet run --project C:\Users\amado\code\mathtabla-hooks\src\MathTabla.AgentHooks -- pre-tool-policy --host claude
 ```
 
 See:
 
 - `examples/vscode/hooks.json`
+- `examples/copilot/hooks.json`
 - `examples/codex/hooks.json`
 - `examples/claude/settings.json`
 

@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "dotnet run --project C:\\Users\\amado\\code\\mathtabla-hooks\\src\\MathTabla.AgentHooks -- pre-tool-policy"
+            "command": "dotnet run --project C:\\Users\\amado\\code\\mathtabla-hooks\\src\\MathTabla.AgentHooks -- pre-tool-policy --host claude"
           }
         ]
       }

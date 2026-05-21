@@ -5,6 +5,7 @@
       {
         "type": "command",
         "powershell": "dotnet run --project C:\\Users\\amado\\code\\mathtabla-hooks\\src\\MathTabla.AgentHooks -- pre-tool-policy --host copilot",
+        "bash": "dotnet run --project /workspace/src/MathTabla.AgentHooks -- pre-tool-policy --host copilot",
         "timeoutSec": 30
       }
     ]
