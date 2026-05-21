@@ -39,6 +39,15 @@ GitHub Copilot `preToolUse` uses stdout decision JSON instead of exit code `2` f
 
 Centralizing hook logic avoids copying policy rules across VS Code, Codex, Claude Code, and future agents. Each agent only needs enough configuration to call the shared executable.
 
+## Internal structure
+
+The executable flow is intentionally layered:
+
+- `Domain/`: host-neutral hook concepts such as requests, decisions, command names, host names, tool names, events, and exit codes.
+- `Normalization/`: defensive JSON readers that convert agent-specific payload shapes into one `HookRequest`.
+- `Policies/`: deterministic command policy and dangerous command pattern checks.
+- `Adapters/`: host option parsing and response writing for generic, Claude, Copilot, and Codex contracts.
+
 ## Adapter boundary
 
 The reusable C# policy should answer one question: should this normalized tool request be allowed? Host adapters then translate that decision into the contract expected by the caller.

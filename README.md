@@ -14,6 +14,8 @@ The first hook is intentionally small: it reads a JSON payload from stdin, norma
 
 The core policy is agent and model agnostic. Host-specific differences are handled at the edge with `--host`, so the same C# rules can be reused from Claude Code, GitHub Copilot, Codex, or another agent that can call a command hook.
 
+Internally, payloads are normalized into a host-neutral `HookRequest`, evaluated by deterministic policy classes, then adapted back to the calling host contract by the response writer.
+
 ## Portfolio Purpose
 
 This project demonstrates C#, .NET CLI tooling, JSON processing, agent workflow automation, security guardrails, and developer tooling design.
@@ -26,6 +28,13 @@ mathtabla-hooks/
     MathTabla.AgentHooks/
       MathTabla.AgentHooks.csproj
       Program.cs
+      Domain/
+      Normalization/
+      Policies/
+      Adapters/
+  tests/
+    MathTabla.AgentHooks.Tests/
+      MathTabla.AgentHooks.Tests.csproj
   docs/
     hook-paradigm.md
     supported-agents.md

@@ -59,7 +59,6 @@ Recommended `MathTabla.AgentHooks.Tests.csproj` shape:
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
   </PropertyGroup>
 
   <ItemGroup>
@@ -73,6 +72,16 @@ Recommended `MathTabla.AgentHooks.Tests.csproj` shape:
 ```
 
 Do not add `Microsoft.NET.Test.Sdk`, `coverlet.collector`, or `coverlet.msbuild`. TUnit uses Microsoft.Testing.Platform, and its meta package includes compatible coverage/reporting extensions.
+
+With the .NET 10 SDK, `dotnet test` must use the Microsoft.Testing.Platform runner through `global.json`:
+
+```json
+{
+  "test": {
+    "runner": "Microsoft.Testing.Platform"
+  }
+}
+```
 
 ## Accessibility requirement for tests
 

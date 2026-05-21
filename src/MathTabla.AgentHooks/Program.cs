@@ -1,24 +1,53 @@
 using System.Text.Json;
-using System.Text.RegularExpressions;
+using MathTabla.AgentHooks.Adapters;
+using MathTabla.AgentHooks.Domain;
+using MathTabla.AgentHooks.Normalization;
+using MathTabla.AgentHooks.Policies;
 
-return await AgentHooksApp.RunAsync(args);
+namespace MathTabla.AgentHooks;
 
-internal static class AgentHooksApp
+internal static class Program
 {
-    public static async Task<int> RunAsync(string[] args)
+    public static async Task<int> Main(string[] args)
     {
         if (args.Length == 0)
         {
             Console.Error.WriteLine("Missing command. Supported commands: pre-tool-policy");
-            return 1;
+            return HookExitCodes.InvalidInvocation;
         }
 
         return args[0] switch
         {
-            HookCommandNames.PreToolPolicy => await PreToolPolicyCommand.RunAsync(args[1..]),
+            HookCommandNames.PreToolPolicy => await RunPreToolPolicyAsync(args[1..]),
             "--help" or "-h" => WriteHelp(),
             _ => UnknownCommand(args[0])
         };
+    }
+
+    private static async Task<int> RunPreToolPolicyAsync(string[] args)
+    {
+        var host = HookHostOptions.Parse(args);
+        var payload = await Console.In.ReadToEndAsync();
+
+        if (string.IsNullOrWhiteSpace(payload))
+        {
+            Console.Error.WriteLine("No JSON payload was provided on stdin.");
+            return HookExitCodes.InvalidInvocation;
+        }
+
+        HookRequest request;
+        try
+        {
+            request = HookRequestNormalizer.FromJson(payload);
+        }
+        catch (JsonException ex)
+        {
+            Console.Error.WriteLine($"Invalid JSON payload: {ex.Message}");
+            return HookExitCodes.InvalidInvocation;
+        }
+
+        var decision = PreToolCommandPolicy.Evaluate(request);
+        return HookResponseWriter.Write(host, decision);
     }
 
     private static int WriteHelp()
@@ -28,311 +57,12 @@ internal static class AgentHooksApp
         Console.WriteLine("Commands:");
         Console.WriteLine("  pre-tool-policy [--host generic|claude|copilot|codex]");
         Console.WriteLine("      Read a tool-use JSON payload from stdin and block dangerous commands.");
-        return 0;
+        return HookExitCodes.Allow;
     }
 
     private static int UnknownCommand(string command)
     {
         Console.Error.WriteLine($"Unknown command '{command}'. Supported commands: pre-tool-policy");
-        return 1;
+        return HookExitCodes.InvalidInvocation;
     }
-}
-
-internal static class PreToolPolicyCommand
-{
-    public static async Task<int> RunAsync(string[] args)
-    {
-        var host = HookHostOptions.Parse(args);
-        var payload = await Console.In.ReadToEndAsync();
-
-        if (string.IsNullOrWhiteSpace(payload))
-        {
-            Console.Error.WriteLine("No JSON payload was provided on stdin.");
-            return 1;
-        }
-
-        AgentHookRequest request;
-        try
-        {
-            request = AgentHookRequest.FromJson(payload);
-        }
-        catch (JsonException ex)
-        {
-            Console.Error.WriteLine($"Invalid JSON payload: {ex.Message}");
-            return 1;
-        }
-
-        if (string.IsNullOrWhiteSpace(request.Command))
-        {
-            return HookResponseWriter.Allow(host);
-        }
-
-        var decision = CommandPolicy.Evaluate(request.Command);
-        if (decision.Allowed)
-        {
-            return HookResponseWriter.Allow(host);
-        }
-
-        return HookResponseWriter.Block(host, decision.Reason ?? "Blocked by pre-tool policy.");
-    }
-}
-
-internal static class HookCommandNames
-{
-    public const string PreToolPolicy = "pre-tool-policy";
-    public const string SessionContext = "session-context";
-    public const string PostToolReview = "post-tool-review";
-    public const string StopCheck = "stop-check";
-}
-
-internal static class HookHosts
-{
-    public const string Generic = "generic";
-    public const string Claude = "claude";
-    public const string Copilot = "copilot";
-    public const string Codex = "codex";
-}
-
-internal static class HookEvents
-{
-    public const string PreToolUse = "PreToolUse";
-    public const string PreToolUseCamelCase = "preToolUse";
-    public const string PostToolUse = "PostToolUse";
-    public const string PostToolUseCamelCase = "postToolUse";
-    public const string Stop = "Stop";
-    public const string AgentStop = "agentStop";
-    public const string SessionStart = "SessionStart";
-    public const string SessionStartCamelCase = "sessionStart";
-}
-
-internal static class HookExitCodes
-{
-    public const int Allow = 0;
-    public const int InvalidInvocation = 1;
-    public const int Block = 2;
-}
-
-internal static class HookHostOptions
-{
-    public static string Parse(string[] args)
-    {
-        for (var i = 0; i < args.Length; i++)
-        {
-            if (!string.Equals(args[i], "--host", StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
-            if (i + 1 >= args.Length)
-            {
-                return HookHosts.Generic;
-            }
-
-            var host = args[i + 1].Trim().ToLowerInvariant();
-            return host switch
-            {
-                HookHosts.Claude => HookHosts.Claude,
-                HookHosts.Copilot => HookHosts.Copilot,
-                HookHosts.Codex => HookHosts.Codex,
-                _ => HookHosts.Generic
-            };
-        }
-
-        return HookHosts.Generic;
-    }
-}
-
-internal static class HookResponseWriter
-{
-    public static int Allow(string host)
-    {
-        if (host == HookHosts.Copilot)
-        {
-            Console.WriteLine("{}");
-        }
-
-        return HookExitCodes.Allow;
-    }
-
-    public static int Block(string host, string reason)
-    {
-        if (host == HookHosts.Copilot)
-        {
-            var output = new
-            {
-                permissionDecision = "deny",
-                permissionDecisionReason = reason
-            };
-
-            Console.WriteLine(JsonSerializer.Serialize(output));
-            return HookExitCodes.Allow;
-        }
-
-        Console.Error.WriteLine(reason);
-        return HookExitCodes.Block;
-    }
-}
-
-internal sealed record AgentHookRequest(
-    string? HookEventName,
-    string? ToolName,
-    string? Command)
-{
-    public static AgentHookRequest FromJson(string payload)
-    {
-        using var document = JsonDocument.Parse(payload);
-        var root = document.RootElement;
-
-        var hookEventName = JsonReader.GetString(root, "hook_event_name", "hookEventName");
-        var toolName = JsonReader.GetString(root, "tool_name", "toolName");
-        var command =
-            JsonReader.GetNestedString(root, ["tool_input", "command"]) ??
-            JsonReader.GetNestedString(root, ["toolInput", "command"]) ??
-            JsonReader.GetNestedString(root, ["toolArgs", "command"]) ??
-            JsonReader.GetCommandFromJsonString(root, "toolArgs") ??
-            JsonReader.GetCommandFromJsonString(root, "tool_args") ??
-            JsonReader.GetString(root, "command");
-
-        return new AgentHookRequest(hookEventName, toolName, command);
-    }
-}
-
-internal static class JsonReader
-{
-    public static string? GetString(JsonElement element, params string[] propertyNames)
-    {
-        foreach (var propertyName in propertyNames)
-        {
-            if (element.ValueKind == JsonValueKind.Object &&
-                element.TryGetProperty(propertyName, out var value) &&
-                value.ValueKind == JsonValueKind.String)
-            {
-                return value.GetString();
-            }
-        }
-
-        return null;
-    }
-
-    public static string? GetNestedString(JsonElement element, IReadOnlyList<string> path)
-    {
-        var current = element;
-        foreach (var segment in path)
-        {
-            if (current.ValueKind != JsonValueKind.Object ||
-                !current.TryGetProperty(segment, out current))
-            {
-                return null;
-            }
-        }
-
-        return current.ValueKind == JsonValueKind.String ? current.GetString() : null;
-    }
-
-    public static string? GetCommandFromJsonString(JsonElement element, string propertyName)
-    {
-        var json = GetString(element, propertyName);
-        if (string.IsNullOrWhiteSpace(json))
-        {
-            return null;
-        }
-
-        try
-        {
-            using var document = JsonDocument.Parse(json);
-            return GetNestedString(document.RootElement, ["command"]);
-        }
-        catch (JsonException)
-        {
-            return null;
-        }
-    }
-}
-
-internal static partial class CommandPolicy
-{
-    private static readonly string UserProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-
-    public static PolicyDecision Evaluate(string command)
-    {
-        if (RmRfRegex().IsMatch(command))
-        {
-            return PolicyDecision.Block("Blocked command: recursive forced deletion with rm -rf is not allowed.");
-        }
-
-        if (PowerShellForcedRecursiveDeleteRegex().IsMatch(command))
-        {
-            return PolicyDecision.Block("Blocked command: Remove-Item with both -Recurse and -Force is not allowed.");
-        }
-
-        if (DropTableRegex().IsMatch(command))
-        {
-            return PolicyDecision.Block("Blocked command: DROP TABLE requires explicit review before execution.");
-        }
-
-        if (TargetsGitInternals(command) && IsDestructiveFileCommand(command))
-        {
-            return PolicyDecision.Block("Blocked command: destructive operations targeting .git are not allowed.");
-        }
-
-        if (TargetsProtectedRoot(command) && IsDestructiveFileCommand(command))
-        {
-            return PolicyDecision.Block("Blocked command: destructive operations targeting a user profile or system folder require explicit review.");
-        }
-
-        return PolicyDecision.Allow();
-    }
-
-    private static bool IsDestructiveFileCommand(string command) =>
-        DestructiveFileCommandRegex().IsMatch(command);
-
-    private static bool TargetsGitInternals(string command) =>
-        command.Contains(".git", StringComparison.OrdinalIgnoreCase);
-
-    private static bool TargetsProtectedRoot(string command)
-    {
-        var protectedTargets = new[]
-        {
-            UserProfile,
-            "%USERPROFILE%",
-            "$env:USERPROFILE",
-            "~",
-            @"C:\",
-            @"C:\Windows",
-            @"C:\Windows\System32",
-            Environment.GetFolderPath(Environment.SpecialFolder.Windows),
-            Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
-            Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86)
-        };
-
-        return protectedTargets
-            .Where(target => !string.IsNullOrWhiteSpace(target))
-            .Any(target => ContainsPathTarget(command, target));
-    }
-
-    private static bool ContainsPathTarget(string command, string target)
-    {
-        var escaped = Regex.Escape(target.TrimEnd('\\', '/'));
-        var pattern = $@"(^|[\s'""]){escaped}([\\/]?)([\s'""]|$)";
-        return Regex.IsMatch(command, pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-    }
-
-    [GeneratedRegex(@"\brm\s+.*-[A-Za-z]*r[A-Za-z]*f[A-Za-z]*\b|\brm\s+.*-[A-Za-z]*f[A-Za-z]*r[A-Za-z]*\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
-    private static partial Regex RmRfRegex();
-
-    [GeneratedRegex(@"\b(remove-item|rm|del|erase)\b(?=.*\s-(recurse|r)\b)(?=.*\s-(force|f)\b)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
-    private static partial Regex PowerShellForcedRecursiveDeleteRegex();
-
-    [GeneratedRegex(@"\bdrop\s+table\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
-    private static partial Regex DropTableRegex();
-
-    [GeneratedRegex(@"\b(rm|remove-item|del|erase|rmdir|rd)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
-    private static partial Regex DestructiveFileCommandRegex();
-}
-
-internal sealed record PolicyDecision(bool Allowed, string? Reason)
-{
-    public static PolicyDecision Allow() => new(true, null);
-
-    public static PolicyDecision Block(string reason) => new(false, reason);
 }

@@ -2,4 +2,7 @@
   <Folder Name="/src/">
     <Project Path="src/MathTabla.AgentHooks/MathTabla.AgentHooks.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/MathTabla.AgentHooks.Tests/MathTabla.AgentHooks.Tests.csproj" />
+  </Folder>
 </Solution>
