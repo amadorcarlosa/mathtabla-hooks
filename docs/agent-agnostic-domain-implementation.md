@@ -247,6 +247,62 @@ Keep `Program.cs` small enough that a reader can understand the executable flow 
 - Keep comments sparse and useful.
 - Keep the first version intentionally small.
 
+## Mandatory testing requirement
+
+This implementation must include a TUnit test project. Do not treat tests as a follow-up task.
+
+Follow `docs/tunit-testing-guide.md` when creating the test project.
+
+Required test project:
+
+```text
+tests/
+  MathTabla.AgentHooks.Tests/
+    MathTabla.AgentHooks.Tests.csproj
+```
+
+The test project must:
+
+- target `net10.0`
+- reference `src/MathTabla.AgentHooks/MathTabla.AgentHooks.csproj`
+- use the `TUnit` package
+- avoid `Microsoft.NET.Test.Sdk`
+- be added to `MathTabla.AgentHooks.slnx`
+
+Required unit test coverage:
+
+- `HookRequestNormalizer`
+  - Claude-style `tool_input.command`
+  - camelCase `toolInput.command`
+  - Copilot object `toolArgs.command`
+  - Copilot JSON-string `toolArgs`
+  - root-level `command`
+- `PreToolCommandPolicy`
+  - allows `dotnet build`
+  - allows `git status`
+  - blocks `rm -rf .git`
+  - blocks `Remove-Item .git -Recurse -Force`
+  - blocks SQL `DROP TABLE`
+  - blocks destructive commands targeting `.git`
+  - blocks destructive commands targeting user profile or system folders
+- `HookHostOptions`
+  - defaults to `generic`
+  - parses `claude`
+  - parses `copilot`
+  - parses `codex`
+  - falls back to `generic` for unknown or missing host values
+- `HookResponseWriter`
+  - generic/Claude/Codex block writes stderr and returns exit code `2`
+  - Copilot allow writes `{}` to stdout and returns exit code `0`
+  - Copilot block writes `permissionDecision: deny` JSON to stdout and returns exit code `0`
+
+Required command-line smoke tests:
+
+- Claude-style safe command exits `0`
+- Claude-style dangerous command exits `2`
+- Copilot-style safe command writes `{}` and exits `0`
+- Copilot-style dangerous command writes `permissionDecision: deny` and exits `0`
+
 ## Verification commands
 
 Run from repository root.
@@ -311,6 +367,14 @@ Expected stdout:
 
 Expected exit code: `0`.
 
+Run unit tests:
+
+```powershell
+dotnet test
+```
+
+Expected result: all tests pass.
+
 ## Documentation updates
 
 After the refactor:
@@ -325,6 +389,9 @@ After the refactor:
 - Domain classes are host-neutral.
 - Policy evaluation does not write to stdout/stderr and does not return process exit codes.
 - Host-specific output is isolated in `Adapters/HookResponseWriter.cs`.
+- TUnit test project exists under `tests/MathTabla.AgentHooks.Tests`.
+- Tests cover normalization, policy evaluation, host option parsing, and host response writing.
 - Existing examples still call the same executable command.
 - `dotnet build /nr:false` succeeds.
+- `dotnet test` succeeds.
 - All four verification commands above produce the expected results.
