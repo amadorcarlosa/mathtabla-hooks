@@ -56,3 +56,18 @@ The reusable C# policy should answer one question: should this normalized tool r
 - GitHub Copilot: block with stdout JSON and exit code `0`.
 - Codex: keep isolated behind `--host codex` while its hook surface continues to evolve.
 - Generic agents: use the simple stderr plus exit code `2` contract.
+
+## Knowledge discovery command
+
+The app also exposes deterministic knowledge-base discovery through `kb-discover`.
+
+This command stays model agnostic. It does not write summaries or make implementation decisions. Instead, it reads `metadata.json` and `graph.json`, scores notes against a query, traverses graph neighbors, and returns structured JSON that any agent can use as curated context.
+
+```powershell
+dotnet run --project src\MathTabla.AgentHooks -- kb-discover --root C:\Users\amado\code\MathTabla --query "mobile drag and drop"
+```
+
+The intended division of labor is:
+
+- C#: load indexes, classify sources, score metadata, traverse graph, return JSON
+- Agent/model: interpret the JSON, compare research against implementation, and propose changes

@@ -69,6 +69,32 @@ Planned extension points include:
 - `post-tool-review`
 - `stop-check`
 
+## Knowledge discovery
+
+The `kb-discover` command searches MathTabla knowledge indexes and returns curated JSON context split into research, implementation, and related notes.
+
+```powershell
+dotnet run --project src/MathTabla.AgentHooks -- kb-discover `
+  --root C:\Users\amado\code\MathTabla `
+  --query "mobile drag and drop" `
+  --depth 2 `
+  --max-results 10
+```
+
+Inputs:
+
+- `--root`: repository root containing `static/knowledge/metadata.json`, or the knowledge folder itself
+- `--query`: user intent or search terms
+- `--depth`: graph neighbor traversal depth, default `2`
+- `--max-results`: max results per group, default `10`
+
+Output groups:
+
+- `research`: notes under `/knowledge/sources/`
+- `implementation`: notes under `/knowledge/docs/` or docs-style display paths
+- `related`: additional curated or graph-neighbor notes
+- `recommendedNextSearches`: high-signal tags and keywords for follow-up searches
+
 ## Pre-tool policy
 
 The `pre-tool-policy` command reads JSON from stdin and checks these common fields:

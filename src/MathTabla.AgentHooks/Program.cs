@@ -1,6 +1,7 @@
 using System.Text.Json;
 using MathTabla.AgentHooks.Adapters;
 using MathTabla.AgentHooks.Domain;
+using MathTabla.AgentHooks.Knowledge.Commands;
 using MathTabla.AgentHooks.Normalization;
 using MathTabla.AgentHooks.Policies;
 
@@ -19,6 +20,7 @@ internal static class Program
         return args[0] switch
         {
             HookCommandNames.PreToolPolicy => await RunPreToolPolicyAsync(args[1..]),
+            HookCommandNames.KbDiscover => await KbDiscoverCommand.RunAsync(args[1..], Console.Out, Console.Error),
             "--help" or "-h" => WriteHelp(),
             _ => UnknownCommand(args[0])
         };
@@ -57,6 +59,8 @@ internal static class Program
         Console.WriteLine("Commands:");
         Console.WriteLine("  pre-tool-policy [--host generic|claude|copilot|codex]");
         Console.WriteLine("      Read a tool-use JSON payload from stdin and block dangerous commands.");
+        Console.WriteLine("  kb-discover --root <repo> --query <query> [--depth 2] [--max-results 10]");
+        Console.WriteLine("      Search MathTabla knowledge metadata and graph indexes for curated context.");
         return HookExitCodes.Allow;
     }
 
