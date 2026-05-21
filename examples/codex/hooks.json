@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "name": "MathTabla pre-tool policy",
+        "command": "dotnet",
+        "args": [
+          "run",
+          "--project",
+          "C:\\Users\\amado\\code\\mathtabla-hooks\\src\\MathTabla.AgentHooks",
+          "--",
+          "pre-tool-policy"
+        ]
+      }
+    ]
+  }
+}
