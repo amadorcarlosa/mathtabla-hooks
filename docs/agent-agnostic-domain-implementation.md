@@ -251,6 +251,8 @@ Keep `Program.cs` small enough that a reader can understand the executable flow 
 
 Run from repository root.
 
+Before adding or changing tests, follow `docs/tunit-testing-guide.md`.
+
 Build:
 
 ```powershell

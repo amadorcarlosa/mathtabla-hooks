@@ -136,5 +136,6 @@ See:
 - `examples/copilot/hooks.json`
 - `examples/codex/hooks.json`
 - `examples/claude/settings.json`
+- `docs/tunit-testing-guide.md`
 
 Treat these as adapter examples. Exact hook configuration keys can differ by agent version, but the executable contract should stay stable: JSON in through stdin, exit code out.
