@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "dotnet run --project C:\\Users\\amado\\code\\mathtabla-hooks\\src\\MathTabla.AgentHooks -- playwright-cleanup --repo C:\\Users\\amado\\code\\MathTabla --kill"
+          }
+        ]
+      }
+    ]
+  }
+}

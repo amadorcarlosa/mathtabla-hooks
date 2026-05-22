@@ -95,6 +95,28 @@ Output groups:
 - `related`: additional curated or graph-neighbor notes
 - `recommendedNextSearches`: high-signal tags and keywords for follow-up searches
 
+## Playwright cleanup
+
+The `playwright-cleanup` command reuses MathTabla's existing `scripts\Kill-OrphanMcpProcesses.ps1` cleanup logic. It is intended for post-tool hooks after Playwright MCP/browser work.
+
+Dry-run first:
+
+```powershell
+dotnet run --project src\MathTabla.AgentHooks -- playwright-cleanup `
+  --repo C:\Users\amado\code\MathTabla `
+  --dry-run
+```
+
+Clean up orphaned/leaking Playwright MCP processes:
+
+```powershell
+dotnet run --project src\MathTabla.AgentHooks -- playwright-cleanup `
+  --repo C:\Users\amado\code\MathTabla `
+  --kill
+```
+
+The command deliberately delegates process matching to the existing MathTabla cleanup script instead of killing broad process names like `msedge`, `chrome`, or `node`.
+
 ## Pre-tool policy
 
 The `pre-tool-policy` command reads JSON from stdin and checks these common fields:
